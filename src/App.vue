@@ -20,6 +20,7 @@ import type { DesignStyle, DimensionKey, PreviewScenario, RecommendationPreferen
 
 type ViewKey = 'atlas' | 'recommend' | 'compare' | 'recognize' | 'mix' | 'learn' | 'favorites' | 'export'
 type DetailSectionKey = 'overview' | 'ai' | 'usage' | 'code' | 'related'
+type TrainingMode = 'preview' | 'features' | 'palette' | 'css' | 'difference' | 'pageType'
 type LearningStats = {
   total: number
   correct: number
@@ -68,6 +69,14 @@ const detailSections: Array<{ key: DetailSectionKey; label: string }> = [
   { key: 'code', label: '代码' },
   { key: 'related', label: '相似' },
 ]
+const trainingModes: Array<{ key: TrainingMode; label: string }> = [
+  { key: 'preview', label: '看预览' },
+  { key: 'features', label: '看特征' },
+  { key: 'palette', label: '看配色' },
+  { key: 'css', label: '看 CSS' },
+  { key: 'difference', label: '找差异' },
+  { key: 'pageType', label: '选页面' },
+]
 
 function readViewFromHash(): ViewKey {
   const hash = window.location.hash.replace('#', '')
@@ -94,6 +103,7 @@ const recognitionRecords = ref<RecognitionRecord[]>([])
 const recognitionStatus = ref('上传截图后可本地提取主色；没有 AI Key 时仍保持手动拆解模式。')
 const previewScenario = ref<PreviewScenario>('card')
 const detailSection = ref<DetailSectionKey>('overview')
+const learnMode = ref<TrainingMode>('preview')
 const learnIndex = ref(0)
 const learnAnswer = ref('')
 const learnResult = ref<'idle' | 'right' | 'wrong'>('idle')
@@ -200,6 +210,77 @@ const recognitionDraft = computed(() => {
 })
 
 const learningQuestion = computed(() => styles[learnIndex.value % styles.length])
+const learningPair = computed(() => styles[(learnIndex.value + 11) % styles.length])
+const learningDifferenceKey = computed<DimensionKey>(() => {
+  return (
+    dimensionKeys.find((key) => {
+      const left = learningQuestion.value.formCharacteristics[key].tags.join('|')
+      const right = learningPair.value.formCharacteristics[key].tags.join('|')
+      return left !== right
+    }) ?? 'color'
+  )
+})
+const learningOptions = computed(() => {
+  if (learnMode.value === 'difference') {
+    return dimensionKeys.map((key) => ({ value: key, label: dimensionLabels[key] }))
+  }
+
+  const picks = [learningQuestion.value, learningPair.value, styles[(learnIndex.value + 17) % styles.length], styles[(learnIndex.value + 23) % styles.length]]
+  const unique = Array.from(new Map(picks.map((style) => [style.id, style])).values())
+  return unique
+    .sort((a, b) => ((a.id.length + learnIndex.value) % 7) - ((b.id.length + learnIndex.value) % 7))
+    .map((style) => ({ value: style.id, label: style.nameZh }))
+})
+const learningCorrectAnswer = computed(() =>
+  learnMode.value === 'difference' ? learningDifferenceKey.value : learningQuestion.value.id,
+)
+const learningExpectedLabel = computed(() => {
+  if (learnMode.value === 'difference') return dimensionLabels[learningDifferenceKey.value]
+  return learningQuestion.value.nameZh
+})
+const learningPrompt = computed(() => {
+  const style = learningQuestion.value
+  if (learnMode.value === 'features') {
+    return {
+      title: '根据视觉特征判断风格',
+      body: style.visualFeatures.join('；'),
+    }
+  }
+  if (learnMode.value === 'palette') {
+    return {
+      title: '根据配色判断风格',
+      body: style.colorPalette.map((color) => `${color.name} ${color.hex}`).join(' / '),
+    }
+  }
+  if (learnMode.value === 'css') {
+    return {
+      title: '根据 CSS 片段判断风格',
+      body: style.cssSnippets[0].code,
+    }
+  }
+  if (learnMode.value === 'difference') {
+    return {
+      title: `判断 ${style.nameZh} 与 ${learningPair.value.nameZh} 最明显的差异维度`,
+      body: `${style.formCharacteristics[learningDifferenceKey.value].tags.join('、')}  ↔  ${learningPair.value.formCharacteristics[learningDifferenceKey.value].tags.join('、')}`,
+    }
+  }
+  if (learnMode.value === 'pageType') {
+    return {
+      title: '根据页面类型选择合适风格',
+      body: `${style.pageTypes.map((pageType) => pageTypeLabels[pageType]).join(' / ')}；偏好：${style.tags.slice(0, 5).join('、')}`,
+    }
+  }
+  return {
+    title: '根据实时预览判断风格',
+    body: '观察形状、排版、光影、空间、动效、色彩与质感。',
+  }
+})
+const learningExplanation = computed(() => {
+  if (learnMode.value === 'difference') {
+    return `${learningQuestion.value.nameZh} 与 ${learningPair.value.nameZh} 在「${dimensionLabels[learningDifferenceKey.value]}」上差异最明显：${learningPrompt.value.body}。`
+  }
+  return `${learningQuestion.value.nameZh} 的关键线索是 ${learningQuestion.value.tags.slice(0, 4).join('、')}；${learningQuestion.value.summary}`
+})
 const mixedStyle = computed(() => {
   const selected = mixIds.value
     .map((id) => styles.find((style) => style.id === id))
@@ -461,7 +542,7 @@ function saveRecognition(savedAs: RecognitionRecord['savedAs']) {
 
 function submitAnswer() {
   if (!learnAnswer.value || learnResult.value !== 'idle') return
-  const isRight = learnAnswer.value === learningQuestion.value.id
+  const isRight = learnAnswer.value === learningCorrectAnswer.value
   learnResult.value = isRight ? 'right' : 'wrong'
   learningStats.value = {
     total: learningStats.value.total + 1,
@@ -470,7 +551,7 @@ function submitAnswer() {
       ? learningStats.value.mistakes
       : [
           {
-            expectedId: learningQuestion.value.id,
+            expectedId: learningCorrectAnswer.value,
             answerId: learnAnswer.value,
             at: new Date().toISOString(),
           },
@@ -483,6 +564,16 @@ function nextQuestion() {
   learnIndex.value += 1
   learnAnswer.value = ''
   learnResult.value = 'idle'
+}
+
+function setLearnMode(mode: TrainingMode) {
+  learnMode.value = mode
+  learnAnswer.value = ''
+  learnResult.value = 'idle'
+}
+
+function learningAnswerLabel(id: string) {
+  return styles.find((style) => style.id === id)?.nameZh ?? dimensionLabels[id as DimensionKey] ?? id
 }
 
 function toggleMix(style: DesignStyle) {
@@ -1064,8 +1155,19 @@ onMounted(loadState)
           <Brain :size="22" />
           <div>
             <h2>风格识别训练</h2>
-            <p>看 CSS 预览猜风格，逐步训练“看到效果说出原理”。</p>
+            <p>用预览、特征、配色、CSS、差异和页面类型训练风格判断。</p>
           </div>
+        </div>
+        <div class="training-mode-switch">
+          <button
+            v-for="mode in trainingModes"
+            :key="mode.key"
+            :class="{ active: learnMode === mode.key }"
+            type="button"
+            @click="setLearnMode(mode.key)"
+          >
+            {{ mode.label }}
+          </button>
         </div>
         <div class="learn-stats">
           <div>
@@ -1081,22 +1183,34 @@ onMounted(loadState)
             <strong>{{ learningStats.mistakes.length }}</strong>
           </div>
         </div>
-        <StylePreview :style="learningQuestion" :scenario="previewScenario" />
+        <StylePreview v-if="learnMode === 'preview'" :style="learningQuestion" :scenario="previewScenario" />
+        <div v-else class="training-card">
+          <h3>{{ learningPrompt.title }}</h3>
+          <p>{{ learningPrompt.body }}</p>
+          <div v-if="learnMode === 'palette'" class="training-palette">
+            <i v-for="color in learningQuestion.colorPalette" :key="color.role" :style="{ background: color.hex }"></i>
+          </div>
+          <pre v-if="learnMode === 'css'">{{ learningQuestion.cssSnippets[0].code }}</pre>
+          <div v-if="learnMode === 'difference'" class="training-compare">
+            <StylePreview :style="learningQuestion" compact />
+            <StylePreview :style="learningPair" compact />
+          </div>
+        </div>
         <select v-model="learnAnswer">
           <option value="">选择答案</option>
-          <option v-for="style in styles" :key="style.id" :value="style.id">{{ style.nameZh }}</option>
+          <option v-for="option in learningOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
         </select>
         <div class="learn-actions">
           <button type="button" @click="submitAnswer">提交</button>
           <button type="button" @click="nextQuestion">下一题</button>
         </div>
-        <p v-if="learnResult === 'right'" class="feedback ok">答对了：{{ learningQuestion.summary }}</p>
-        <p v-if="learnResult === 'wrong'" class="feedback bad">答案是 {{ learningQuestion.nameZh }}。注意它的 {{ learningQuestion.tags.slice(0, 4).join('、') }}。</p>
+        <p v-if="learnResult === 'right'" class="feedback ok">答对了：{{ learningExplanation }}</p>
+        <p v-if="learnResult === 'wrong'" class="feedback bad">答案是 {{ learningExpectedLabel }}。{{ learningExplanation }}</p>
         <div v-if="learningStats.mistakes.length" class="mistake-list">
           <h3>最近错题</h3>
           <span v-for="mistake in learningStats.mistakes" :key="`${mistake.expectedId}-${mistake.at}`">
-            {{ styles.find((style) => style.id === mistake.expectedId)?.nameZh }} →
-            {{ styles.find((style) => style.id === mistake.answerId)?.nameZh }}
+            {{ learningAnswerLabel(mistake.expectedId) }} →
+            {{ learningAnswerLabel(mistake.answerId) }}
           </span>
         </div>
       </section>

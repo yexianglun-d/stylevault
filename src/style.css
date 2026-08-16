@@ -1049,6 +1049,27 @@ textarea {
   margin-bottom: 16px;
 }
 
+.training-mode-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.training-mode-switch button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.training-mode-switch button.active {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+
 .learn-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1079,6 +1100,63 @@ textarea {
 
 .learn-view select {
   width: 100%;
+}
+
+.training-card {
+  display: grid;
+  gap: 12px;
+  min-height: 260px;
+  margin-bottom: 16px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbfaf7;
+}
+
+.training-card h3,
+.training-card p {
+  margin: 0;
+}
+
+.training-card h3 {
+  font-size: 18px;
+}
+
+.training-card p {
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.training-card pre {
+  overflow: auto;
+  max-height: 140px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f3f0e8;
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.training-palette {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.training-palette i {
+  display: block;
+  min-height: 54px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+}
+
+.training-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .feedback {
@@ -1898,6 +1976,8 @@ textarea {
   .compare-palette,
   .export-grid,
   .learn-stats,
+  .training-compare,
+  .training-palette,
   .mix-controls,
   .result-row,
   .dimension-grid,

@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "notes:generate": "node scripts/generate-style-notes.mjs",
+    "validate:styles": "node scripts/validate-styles.mjs",
+    "check": "npm run validate:styles && npm run build"
   },
   "dependencies": {
     "@lucide/vue": "^1.31.0",
