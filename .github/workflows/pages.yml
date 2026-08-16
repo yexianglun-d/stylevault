@@ -1,4 +1,4 @@
-name: Deploy StyleVault
+name: Validate StyleVault
 
 on:
   push:
@@ -39,11 +39,13 @@ jobs:
           STYLEVAULT_BASE_PATH: /stylevault/
 
       - name: Upload artifact
+        if: github.event_name == 'workflow_dispatch' && vars.ENABLE_GITHUB_PAGES == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
   deploy:
+    if: github.event_name == 'workflow_dispatch' && vars.ENABLE_GITHUB_PAGES == 'true'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
