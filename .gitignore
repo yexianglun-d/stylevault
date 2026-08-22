@@ -13,6 +13,9 @@ dist-ssr
 output
 *.local
 
+# WorkBuddy internal working memory (not for public repo)
+.workbuddy/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
